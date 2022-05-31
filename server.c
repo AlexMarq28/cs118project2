@@ -115,7 +115,6 @@ int main (int argc, char *argv[])
     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     // =====================================
-
     unsigned short seqNum = (rand() * rand()) % MAX_SEQN;
 
     for (int i = 1; ; i++) {
@@ -164,7 +163,7 @@ int main (int argc, char *argv[])
                         }
 
                         fwrite(ackpkt.payload, 1, ackpkt.length, fp);
-
+			
                         seqNum = ackpkt.acknum;
                         cliSeqNum = (ackpkt.seqnum + ackpkt.length) % MAX_SEQN;
 
@@ -193,24 +192,77 @@ int main (int argc, char *argv[])
         //       without handling data loss.
         //       Only for demo purpose. DO NOT USE IT in your final submission
         struct packet recvpkt;
+	
+	struct packet pkts[WND_SIZE];
+	unsigned short seqNums[WND_SIZE];
+	int curr = 0;
+	int empty = 0;
 
-        while(1) {
-            n = recvfrom(sockfd, &recvpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
-            if (n > 0) {
-                printRecv(&recvpkt);
+	while(1)
+	{
+	    n = recvfrom(sockfd, &recvpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
+	    if (n > 0)
+	    {
+		printRecv(&recvpkt);
 
-                if (recvpkt.fin) {
-                    cliSeqNum = (cliSeqNum + 1) % MAX_SEQN;
+		if (recvpkt.fin)
+		{
+		    cliSeqNum = (cliSeqNum + 1) % MAX_SEQN;
 
-                    buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 1, 0, 0, NULL);
+		    buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 1, 0, 0, NULL);
                     printSend(&ackpkt, 0);
                     sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
 
                     break;
-                }
-            }
-        }
 
+		}
+		
+		else
+		{
+		    buildPkt(&ackpkt, seqNum, (recvpkt.seqnum + recvpkt.length) % MAX_SEQN, 0, 0, 1, 0, 0, NULL);
+		    printSend(&ackpkt, 0);
+		    sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
+
+		    if (empty)
+		    {
+			for (int i = 0; i < WND_SIZE; i++)
+			{
+			    if (seqNums[i] == cliSeqNum)
+			    {
+				cliSeqNum = (cliSeqNum + pkts[i].length) % MAX_SEQN;
+
+				fwrite(pkts[i].payload, 1, pkts[i].length, fp);
+				
+				seqNums[i] = 0;
+				empty--;
+			    }
+			}
+		    }
+
+		    else if(recvpkt.seqnum == cliSeqNum)
+		    {
+			fwrite(recvpkt.payload, 1, recvpkt.length, fp);
+			
+			cliSeqNum = (recvpkt.seqnum + recvpkt.length) % MAX_SEQN;
+		    }
+		    
+		    else
+		    {
+			buildPkt(&pkts[curr], recvpkt.seqnum, recvpkt.acknum, recvpkt.syn, recvpkt.fin, recvpkt.ack, recvpkt.dupack, recvpkt.length, recvpkt.payload);
+			seqNums[curr] = recvpkt.seqnum;
+			for (int i = 0; i < WND_SIZE; i++)
+			{
+			    if (seqNums[i] == 0)
+			    {
+				curr = i;
+			    }
+			}
+			empty++;
+		    }
+		}
+	    }
+	}
+	
         // *** End of your server implementation ***
 
         fclose(fp);

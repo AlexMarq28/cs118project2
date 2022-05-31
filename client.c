@@ -86,6 +86,19 @@ int isTimeout(double end) {
 
 // =====================================
 
+
+int findPkt(struct packet* ackp, unsigned short seq[], int total)
+{
+    for (int i = 0; i < total; i++)
+    {
+	if (ackp->acknum == seq[i])
+	{
+	    return i;
+	}
+    }
+}
+
+
 int main (int argc, char *argv[])
 {
     if (argc != 4) {
@@ -183,22 +196,24 @@ int main (int argc, char *argv[])
 
     struct packet ackpkt;
     struct packet pkts[WND_SIZE];
-    int s = 0;
-    int e = 0;
+    //int s = 0;
+    //int e = 0;
     int full = 0;
+
+    double timers[WND_SIZE];
+    unsigned short seqNums[WND_SIZE];
 
     // =====================================
     // Send First Packet (ACK containing payload)
-
     m = fread(buf, 1, PAYLOAD_SIZE, fp);
 
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 1, 0, m, buf);
     printSend(&pkts[0], 0);
     sendto(sockfd, &pkts[0], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-    timer = setTimer();
+    timers[0] = setTimer();
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 0, 1, m, buf);
 
-    e = 1;
+    //e = 1;
 
     // =====================================
     // *** TODO: Implement the rest of reliable transfer in the client ***
@@ -208,11 +223,82 @@ int main (int argc, char *argv[])
     //       single data packet, and then tears down the connection without
     //       handling data loss.
     //       Only for demo purpose. DO NOT USE IT in your final submission
-    while (1) {
-        n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &servaddr, (socklen_t *) &servaddrlen);
-        if (n > 0) {
-            break;
-        }
+ 
+
+    seqNum = (seqNum + m) % MAX_SEQN;
+    seqNums[0] = seqNum;
+
+    int total_packets = 1;
+    int curr = 1;
+    int read_file = 1;
+
+    while (total_packets < 10 && !full)
+    {
+	m = fread(buf, 1, PAYLOAD_SIZE, fp);
+	if (m <= 0)
+	{
+	    full = 1;
+	    break;
+	}
+	buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
+	printSend(&pkts[curr], 0);
+        sendto(sockfd, &pkts[curr], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
+    	timers[curr] = setTimer();
+    	buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
+	seqNum = (seqNum + m) % MAX_SEQN;
+	seqNums[curr] = seqNum;
+ 	total_packets++;
+	curr++;
+    }
+    full = 1;
+
+    while (1)
+    {
+	if (total_packets < 10 && !full)
+	{
+	    m = fread(buf, 1, PAYLOAD_SIZE, fp);
+	    if (m <= 0)
+	    {
+	        full = 1;
+		continue;
+	    }
+	    buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
+	    printSend(&pkts[curr], 0);
+            sendto(sockfd, &pkts[0], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
+    	    timers[curr] = setTimer();
+    	    buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
+	    seqNum = (seqNum + m) % MAX_SEQN;
+	    seqNums[curr] = seqNum;
+ 	    total_packets++;
+	}
+        full = 1;
+
+	n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &servaddr, (socklen_t *) &servaddrlen);
+	if (n > 0)
+	{
+	    if (total_packets == 1)
+	    {
+		break;
+	    }
+	    else
+	    {
+		curr = findPkt(&ackpkt, seqNums, total_packets);
+		printRecv(&ackpkt);
+		total_packets--;
+		full = 0;
+	    }	    
+	}
+
+	for (int i = 0; i < total_packets; i++)
+	{
+	    if (isTimeout(timers[i]))
+	    {
+		printTimeout(&pkts[i]);
+		printSend(&pkts[i], 1);
+		sendto(sockfd, &pkts[i], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
+		timers[i] = setTimer();
+	    }
+	}
     }
 
     // *** End of your client implementation ***
