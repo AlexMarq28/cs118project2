@@ -100,7 +100,7 @@ int main (int argc, char *argv[])
     memset(servaddr.sin_zero, '\0', sizeof(servaddr.sin_zero));
 
     if (bind(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) == -1) {
-	    perror("bind() error");
+        perror("bind() error");
         exit(1);
     }
 
@@ -124,8 +124,8 @@ int main (int argc, char *argv[])
         // is already working.
 
         int n;
-	        
-	FILE* fp;
+
+        FILE* fp;
 
         struct packet synpkt, synackpkt, ackpkt;
 
@@ -145,9 +145,9 @@ int main (int argc, char *argv[])
         while (1) {
             printSend(&synackpkt, 0);
             sendto(sockfd, &synackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
-
+            
             while(1) {
-		n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
+                n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
                 if (n > 0) {
                     printRecv(&ackpkt);
                     if (ackpkt.seqnum == cliSeqNum && ackpkt.ack && ackpkt.acknum == (synackpkt.seqnum + 1) % MAX_SEQN) {
@@ -170,7 +170,7 @@ int main (int argc, char *argv[])
 
                         buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 1, 0, 0, NULL);
                         printSend(&ackpkt, 0);
-			sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
+                        sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
 
                         break;
                     }
@@ -188,27 +188,18 @@ int main (int argc, char *argv[])
         // *** TODO: Implement the rest of reliable transfer in the server ***
         // Implement GBN for basic requirement or Selective Repeat to receive bonus
 
-        // Note: the following code is not the complete logic. It only expects
+        // Note: the following code is not the complete logic. It only expects 
         //       a single data packet, and then tears down the connection
         //       without handling data loss.
         //       Only for demo purpose. DO NOT USE IT in your final submission
         struct packet recvpkt;
 
-	struct packet pkts[WND_SIZE];
-	unsigned short seqNums[WND_SIZE];
-	int setSeq[WND_SIZE];
-	int curr = 0;
-	int notempty = 0;
-	
-        while(1) 
-	{
+        while(1) {
             n = recvfrom(sockfd, &recvpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
-            if (n > 0) 
-	    {
+            if (n > 0) {
                 printRecv(&recvpkt);
 
-                if (recvpkt.fin) 
-		{
+                if (recvpkt.fin) {
                     cliSeqNum = (cliSeqNum + 1) % MAX_SEQN;
 
                     buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 1, 0, 0, NULL);
@@ -217,50 +208,6 @@ int main (int argc, char *argv[])
 
                     break;
                 }
-		else
-		{
-		    buildPkt(&ackpkt, seqNum, (recvpkt.seqnum + recvpkt.length) % MAX_SEQN, 0, 0, 1, 0, 0, NULL);
-                    printSend(&ackpkt, 0);
-                    sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
-
-		    if (recvpkt.seqnum == cliSeqNum)
-		    {
-			fwrite(recvpkt.payload, 1, recvpkt.length, fp);
-
-                        cliSeqNum = (recvpkt.seqnum + recvpkt.length) % MAX_SEQN;
-		    }
-
-		    else if (notempty)
-                    {
-                        for (int i = 0; i < WND_SIZE; i++)
-                        {
-                            if (seqNums[i] == cliSeqNum && setSeq[i])
-                            {
-                                cliSeqNum = (cliSeqNum + pkts[i].length) % MAX_SEQN;
-
-                                fwrite(pkts[i].payload, 1, pkts[i].length, fp);
-
-                                setSeq[i] = 0;
-                                notempty--;
-                            }
-                        }
-                    }
-
-		    else
-		    {
-			buildPkt(&pkts[curr], recvpkt.seqnum, recvpkt.acknum, recvpkt.syn, recvpkt.fin, recvpkt.ack, recvpkt.dupack, recvpkt.length, recvpkt.payload);
-                        seqNums[curr] = recvpkt.seqnum;
-			setSeq[curr] = 1;
-                        for (int i = 0; i < WND_SIZE; i++)
-                        {
-                            if (!setSeq[i])
-                            {
-                                curr = i;
-                            }
-                        }
-                        notempty++;
-		    }
-		}
             }
         }
 
@@ -270,7 +217,7 @@ int main (int argc, char *argv[])
         // =====================================
         // Connection Teardown: This procedure is provided to you directly and
         // is already working.
-	
+
         struct packet finpkt, lastackpkt;
         buildPkt(&finpkt, seqNum, 0, 0, 1, 0, 0, 0, NULL);
         buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 0, 1, 0, NULL);
@@ -302,7 +249,7 @@ int main (int argc, char *argv[])
                 printSend(&finpkt, 1);
                 sendto(sockfd, &finpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
                 timer = setTimer();
-
+                
                 continue;
             }
             if ((lastackpkt.ack || lastackpkt.dupack) && lastackpkt.acknum == (finpkt.seqnum + 1) % MAX_SEQN)

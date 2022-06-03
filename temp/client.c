@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <fcntl.h>
-#include <netdb.h>
+#include <netdb.h> 
 
 // =====================================
 
@@ -86,6 +86,19 @@ int isTimeout(double end) {
 
 // =====================================
 
+
+int findPkt(struct packet* ackp, unsigned short seq[], int total)
+{
+    for (int i = 0; i < total; i++)
+    {
+	if (ackp->acknum == seq[i])
+	{
+	    return i;
+	}
+    }
+}
+
+
 int main (int argc, char *argv[])
 {
     if (argc != 4) {
@@ -95,8 +108,8 @@ int main (int argc, char *argv[])
 
     struct in_addr servIP;
     if (inet_aton(argv[1], &servIP) == 0) {
-        struct hostent* host_entry;
-        host_entry = gethostbyname(argv[1]);
+        struct hostent* host_entry; 
+        host_entry = gethostbyname(argv[1]); 
         if (host_entry == NULL) {
             perror("ERROR: IP address not in standard dot notation\n");
             exit(1);
@@ -117,7 +130,7 @@ int main (int argc, char *argv[])
 
     int sockfd;
     struct sockaddr_in servaddr;
-
+    
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
     servaddr.sin_family = AF_INET;
@@ -174,7 +187,7 @@ int main (int argc, char *argv[])
 
     // =====================================
     // FILE READING VARIABLES
-
+    
     char buf[PAYLOAD_SIZE];
     size_t m;
 
@@ -183,27 +196,24 @@ int main (int argc, char *argv[])
 
     struct packet ackpkt;
     struct packet pkts[WND_SIZE];
-    int s = 0;
-    int e = 0;
+    //int s = 0;
+    //int e = 0;
     int full = 0;
-    
+
     double timers[WND_SIZE];
-    int timerstart[WND_SIZE];
     unsigned short seqNums[WND_SIZE];
 
     // =====================================
     // Send First Packet (ACK containing payload)
-
     m = fread(buf, 1, PAYLOAD_SIZE, fp);
 
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 1, 0, m, buf);
     printSend(&pkts[0], 0);
     sendto(sockfd, &pkts[0], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
     timers[0] = setTimer();
-    timerstart[0] = 1;
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 0, 1, m, buf);
 
-    e = 1;
+    //e = 1;
 
     // =====================================
     // *** TODO: Implement the rest of reliable transfer in the client ***
@@ -213,31 +223,32 @@ int main (int argc, char *argv[])
     //       single data packet, and then tears down the connection without
     //       handling data loss.
     //       Only for demo purpose. DO NOT USE IT in your final submission
-    
+ 
+
     seqNum = (seqNum + m) % MAX_SEQN;
     seqNums[0] = seqNum;
 
     int total_packets = 1;
     int curr = 1;
-    
+    int read_file = 1;
+
     while (total_packets < 10 && !full)
     {
 	m = fread(buf, 1, PAYLOAD_SIZE, fp);
-        if (m <= 0)
-        {
-            full = 1;
-            break;
-        }
-        buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
-        printSend(&pkts[curr], 0);
+	if (m <= 0)
+	{
+	    full = 1;
+	    break;
+	}
+	buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
+	printSend(&pkts[curr], 0);
         sendto(sockfd, &pkts[curr], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-        timers[curr] = setTimer();
-	timerstart[curr] = 1;
-        buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
-        seqNum = (seqNum + m) % MAX_SEQN;
-        seqNums[curr] = seqNum;
-        total_packets++;
-        curr++;
+    	timers[curr] = setTimer();
+    	buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
+	seqNum = (seqNum + m) % MAX_SEQN;
+	seqNums[curr] = seqNum;
+ 	total_packets++;
+	curr++;
     }
     full = 1;
 
@@ -246,52 +257,46 @@ int main (int argc, char *argv[])
 	if (total_packets < 10 && !full)
 	{
 	    m = fread(buf, 1, PAYLOAD_SIZE, fp);
-            if (m <= 0)
-            {
-                full = 1;
-                continue;
-            }
-            buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
-            printSend(&pkts[curr], 0);
-            sendto(sockfd, &pkts[curr], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-            timers[curr] = setTimer();
-	    timerstart[curr] = 1;
-            buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
-            seqNum = (seqNum + m) % MAX_SEQN;
-            seqNums[curr] = seqNum;
-            total_packets++;
+	    if (m <= 0)
+	    {
+	        full = 1;
+		continue;
+	    }
+	    buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
+	    printSend(&pkts[curr], 0);
+            sendto(sockfd, &pkts[0], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
+    	    timers[curr] = setTimer();
+    	    buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
+	    seqNum = (seqNum + m) % MAX_SEQN;
+	    seqNums[curr] = seqNum;
+ 	    total_packets++;
 	}
-	full = 1;
+        full = 1;
 
 	n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &servaddr, (socklen_t *) &servaddrlen);
 	if (n > 0)
 	{
-	    for (int i = 0; i < WND_SIZE; i++)
+	    if (total_packets == 1)
 	    {
-		if (ackpkt.acknum == seqNums[i])
-		{
-		    curr = i;
-		}
+		break;
 	    }
-	    printRecv(&ackpkt);
-	    total_packets--;
-	    full = 0;
+	    else
+	    {
+		curr = findPkt(&ackpkt, seqNums, total_packets);
+		printRecv(&ackpkt);
+		total_packets--;
+		full = 0;
+	    }	    
 	}
 
-	if (total_packets == 0)
+	for (int i = 0; i < total_packets; i++)
 	{
-	    break;
-	}
-
-	for (int i =0; i < WND_SIZE; i++)
-	{
-	    if (isTimeout(timers[i]) && timerstart[i])
+	    if (isTimeout(timers[i]))
 	    {
 		printTimeout(&pkts[i]);
 		printSend(&pkts[i], 1);
 		sendto(sockfd, &pkts[i], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-                timers[i] = setTimer();
-		timerstart[curr] = 1;
+		timers[i] = setTimer();
 	    }
 	}
     }
@@ -344,7 +349,7 @@ int main (int argc, char *argv[])
             printSend(&ackpkt, 0);
             sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
             finTimer = setFinTimer();
-	    finTimerOn = 1;
+            finTimerOn = 1;
             buildPkt(&ackpkt, ackpkt.seqnum, ackpkt.acknum, 0, 0, 0, 1, 0, NULL);
         }
     }

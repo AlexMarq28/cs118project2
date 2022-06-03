@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <fcntl.h>
-#include <netdb.h>
+#include <netdb.h> 
 
 // =====================================
 
@@ -95,8 +95,8 @@ int main (int argc, char *argv[])
 
     struct in_addr servIP;
     if (inet_aton(argv[1], &servIP) == 0) {
-        struct hostent* host_entry;
-        host_entry = gethostbyname(argv[1]);
+        struct hostent* host_entry; 
+        host_entry = gethostbyname(argv[1]); 
         if (host_entry == NULL) {
             perror("ERROR: IP address not in standard dot notation\n");
             exit(1);
@@ -117,7 +117,7 @@ int main (int argc, char *argv[])
 
     int sockfd;
     struct sockaddr_in servaddr;
-
+    
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
     servaddr.sin_family = AF_INET;
@@ -174,7 +174,7 @@ int main (int argc, char *argv[])
 
     // =====================================
     // FILE READING VARIABLES
-
+    
     char buf[PAYLOAD_SIZE];
     size_t m;
 
@@ -186,10 +186,6 @@ int main (int argc, char *argv[])
     int s = 0;
     int e = 0;
     int full = 0;
-    
-    double timers[WND_SIZE];
-    int timerstart[WND_SIZE];
-    unsigned short seqNums[WND_SIZE];
 
     // =====================================
     // Send First Packet (ACK containing payload)
@@ -199,8 +195,7 @@ int main (int argc, char *argv[])
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 1, 0, m, buf);
     printSend(&pkts[0], 0);
     sendto(sockfd, &pkts[0], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-    timers[0] = setTimer();
-    timerstart[0] = 1;
+    timer = setTimer();
     buildPkt(&pkts[0], seqNum, (synackpkt.seqnum + 1) % MAX_SEQN, 0, 0, 0, 1, m, buf);
 
     e = 1;
@@ -213,87 +208,11 @@ int main (int argc, char *argv[])
     //       single data packet, and then tears down the connection without
     //       handling data loss.
     //       Only for demo purpose. DO NOT USE IT in your final submission
-    
-    seqNum = (seqNum + m) % MAX_SEQN;
-    seqNums[0] = seqNum;
-
-    int total_packets = 1;
-    int curr = 1;
-    
-    while (total_packets < 10 && !full)
-    {
-	m = fread(buf, 1, PAYLOAD_SIZE, fp);
-        if (m <= 0)
-        {
-            full = 1;
+    while (1) {
+        n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &servaddr, (socklen_t *) &servaddrlen);
+        if (n > 0) {
             break;
         }
-        buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
-        printSend(&pkts[curr], 0);
-        sendto(sockfd, &pkts[curr], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-        timers[curr] = setTimer();
-	timerstart[curr] = 1;
-        buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
-        seqNum = (seqNum + m) % MAX_SEQN;
-        seqNums[curr] = seqNum;
-        total_packets++;
-        curr++;
-    }
-    full = 1;
-
-    while (1)
-    {
-	if (total_packets < 10 && !full)
-	{
-	    m = fread(buf, 1, PAYLOAD_SIZE, fp);
-            if (m <= 0)
-            {
-                full = 1;
-                continue;
-            }
-            buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 0, m, buf);
-            printSend(&pkts[curr], 0);
-            sendto(sockfd, &pkts[curr], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-            timers[curr] = setTimer();
-	    timerstart[curr] = 1;
-            buildPkt(&pkts[curr], seqNum, 0, 0, 0, 0, 1, m, buf);
-            seqNum = (seqNum + m) % MAX_SEQN;
-            seqNums[curr] = seqNum;
-            total_packets++;
-	}
-	full = 1;
-
-	n = recvfrom(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr *) &servaddr, (socklen_t *) &servaddrlen);
-	if (n > 0)
-	{
-	    for (int i = 0; i < WND_SIZE; i++)
-	    {
-		if (ackpkt.acknum == seqNums[i])
-		{
-		    curr = i;
-		}
-	    }
-	    printRecv(&ackpkt);
-	    total_packets--;
-	    full = 0;
-	}
-
-	if (total_packets == 0)
-	{
-	    break;
-	}
-
-	for (int i =0; i < WND_SIZE; i++)
-	{
-	    if (isTimeout(timers[i]) && timerstart[i])
-	    {
-		printTimeout(&pkts[i]);
-		printSend(&pkts[i], 1);
-		sendto(sockfd, &pkts[i], PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
-                timers[i] = setTimer();
-		timerstart[curr] = 1;
-	    }
-	}
     }
 
     // *** End of your client implementation ***
@@ -344,7 +263,7 @@ int main (int argc, char *argv[])
             printSend(&ackpkt, 0);
             sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &servaddr, servaddrlen);
             finTimer = setFinTimer();
-	    finTimerOn = 1;
+            finTimerOn = 1;
             buildPkt(&ackpkt, ackpkt.seqnum, ackpkt.acknum, 0, 0, 0, 1, 0, NULL);
         }
     }

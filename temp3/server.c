@@ -137,6 +137,10 @@ int main (int argc, char *argv[])
                     break;
             }
         }
+	
+	char buffer[1000000];
+	int buffer_length = 0;
+	unsigned short start_pos;
 
         unsigned short cliSeqNum = (synpkt.seqnum + 1) % MAX_SEQN; // next message from client should have this sequence number
 
@@ -163,7 +167,13 @@ int main (int argc, char *argv[])
                             exit(1);
                         }
 
-                        fwrite(ackpkt.payload, 1, ackpkt.length, fp);
+                        //fwrite(ackpkt.payload, 1, ackpkt.length, fp);
+			for (int i = 0; i < ackpkt.length; i++)
+			{
+			    buffer[i] = ackpkt.payload[i];
+			}
+			buffer_length += ackpkt.length;
+			start_pos = ackpkt.seqnum;
 
                         seqNum = ackpkt.acknum;
                         cliSeqNum = (ackpkt.seqnum + ackpkt.length) % MAX_SEQN;
@@ -200,15 +210,15 @@ int main (int argc, char *argv[])
 	int curr = 0;
 	int notempty = 0;
 	
-        while(1) 
+        while (1)
 	{
-            n = recvfrom(sockfd, &recvpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
-            if (n > 0) 
-	    {
+	    n = recvfrom(sockfd, &recvpkt, PKT_SIZE, 0, (struct sockaddr *) &cliaddr, (socklen_t *) &cliaddrlen);
+            if (n > 0)
+            {
                 printRecv(&recvpkt);
 
-                if (recvpkt.fin) 
-		{
+                if (recvpkt.fin)
+                {
                     cliSeqNum = (cliSeqNum + 1) % MAX_SEQN;
 
                     buildPkt(&ackpkt, seqNum, cliSeqNum, 0, 0, 1, 0, 0, NULL);
@@ -217,52 +227,27 @@ int main (int argc, char *argv[])
 
                     break;
                 }
+
 		else
 		{
 		    buildPkt(&ackpkt, seqNum, (recvpkt.seqnum + recvpkt.length) % MAX_SEQN, 0, 0, 1, 0, 0, NULL);
                     printSend(&ackpkt, 0);
                     sendto(sockfd, &ackpkt, PKT_SIZE, 0, (struct sockaddr*) &cliaddr, cliaddrlen);
 
-		    if (recvpkt.seqnum == cliSeqNum)
+		    int start = recvpkt.seqnum - start_pos;
+		    int end = start + recvpkt.length;
+		    for (int i = start; i < end; i++)
 		    {
-			fwrite(recvpkt.payload, 1, recvpkt.length, fp);
-
-                        cliSeqNum = (recvpkt.seqnum + recvpkt.length) % MAX_SEQN;
+			buffer[i] = recvpkt.payload[i - start];
 		    }
-
-		    else if (notempty)
-                    {
-                        for (int i = 0; i < WND_SIZE; i++)
-                        {
-                            if (seqNums[i] == cliSeqNum && setSeq[i])
-                            {
-                                cliSeqNum = (cliSeqNum + pkts[i].length) % MAX_SEQN;
-
-                                fwrite(pkts[i].payload, 1, pkts[i].length, fp);
-
-                                setSeq[i] = 0;
-                                notempty--;
-                            }
-                        }
-                    }
-
-		    else
-		    {
-			buildPkt(&pkts[curr], recvpkt.seqnum, recvpkt.acknum, recvpkt.syn, recvpkt.fin, recvpkt.ack, recvpkt.dupack, recvpkt.length, recvpkt.payload);
-                        seqNums[curr] = recvpkt.seqnum;
-			setSeq[curr] = 1;
-                        for (int i = 0; i < WND_SIZE; i++)
-                        {
-                            if (!setSeq[i])
-                            {
-                                curr = i;
-                            }
-                        }
-                        notempty++;
-		    }
+		    buffer_length += recvpkt.length;
+		    
+		    cliSeqNum = (recvpkt.seqnum + recvpkt.length) % MAX_SEQN;
 		}
-            }
-        }
+	    }
+	}
+
+	fwrite(buffer, 1, buffer_length, fp);	
 
         // *** End of your server implementation ***
 
